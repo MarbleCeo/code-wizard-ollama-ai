@@ -27,6 +27,9 @@ export class OllamaService {
   private defaultOptions: OllamaOptions;
   private isRunning: boolean = false;
   private currentWorkingDirectory: string = "/";
+  private connectionAttempts: number = 0;
+  private maxRetries: number = 3;
+  private retryDelay: number = 1000;
 
   constructor(baseUrl: string = 'http://localhost:11434') {
     this.baseUrl = baseUrl;
@@ -36,11 +39,31 @@ export class OllamaService {
       temperature: 0.2,
       maxTokens: 2048
     };
+
+    // Try to detect if we're in a local environment
+    const isLocalHost = window.location.hostname === 'localhost' || 
+                        window.location.hostname === '127.0.0.1';
+    
+    // If we're locally hosted, automatically attempt connection
+    if (isLocalHost) {
+      console.log("Local development detected, automatically checking Ollama connection");
+      this.isOllamaRunning().then(running => {
+        if (running) {
+          console.log("Successfully connected to Ollama at", this.baseUrl);
+        }
+      });
+    }
   }
 
   // Set the Ollama endpoint
   public setEndpoint(endpoint: string): void {
-    this.baseUrl = endpoint;
+    if (endpoint && endpoint.trim() !== '') {
+      this.baseUrl = endpoint;
+      this.connectionAttempts = 0; // Reset connection attempts when endpoint changes
+      console.log(`Ollama endpoint set to: ${this.baseUrl}`);
+    } else {
+      console.warn("Empty endpoint provided, keeping current endpoint:", this.baseUrl);
+    }
   }
 
   // Get the current endpoint
@@ -58,18 +81,56 @@ export class OllamaService {
     return this.currentWorkingDirectory;
   }
 
-  // Check if Ollama is running
+  // Check if Ollama is running with retry logic
   public async isOllamaRunning(): Promise<boolean> {
+    if (this.connectionAttempts >= this.maxRetries) {
+      console.warn(`Reached maximum connection attempts (${this.maxRetries}) to Ollama. Giving up.`);
+      this.isRunning = false;
+      return false;
+    }
+
+    this.connectionAttempts++;
+    console.log(`Attempting to connect to Ollama at ${this.baseUrl} (attempt ${this.connectionAttempts}/${this.maxRetries})`);
+
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
       const response = await fetch(`${this.baseUrl}/api/tags`, {
         method: 'GET',
+        signal: controller.signal
       });
       
+      clearTimeout(timeoutId);
+      
       this.isRunning = response.status === 200;
+      
+      if (this.isRunning) {
+        console.log("Successfully connected to Ollama");
+        this.connectionAttempts = 0; // Reset attempts counter after successful connection
+      } else {
+        console.warn(`Ollama returned status ${response.status}`);
+      }
+      
       return this.isRunning;
     } catch (error) {
       console.error('Failed to connect to Ollama:', error);
+      
+      // If this was an abort error (timeout), log accordingly
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.warn('Connection to Ollama timed out');
+      }
+      
       this.isRunning = false;
+      
+      // Retry with exponential backoff
+      if (this.connectionAttempts < this.maxRetries) {
+        console.log(`Will retry in ${this.retryDelay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+        this.retryDelay *= 2; // Exponential backoff
+        return this.isOllamaRunning();
+      }
+      
       return false;
     }
   }
@@ -92,8 +153,21 @@ export class OllamaService {
 
   // Check if our required model is available
   public async isModelAvailable(modelName: string = this.defaultOptions.model): Promise<boolean> {
-    const models = await this.listModels();
-    return models.includes(modelName);
+    try {
+      const models = await this.listModels();
+      return models.includes(modelName);
+    } catch (error) {
+      console.error(`Error checking model availability for ${modelName}:`, error);
+      return false;
+    }
+  }
+
+  // Reset connection status and attempt new connection
+  public async resetConnection(): Promise<boolean> {
+    console.log("Resetting Ollama connection...");
+    this.connectionAttempts = 0;
+    this.retryDelay = 1000;
+    return await this.isOllamaRunning();
   }
 
   // Pull model if not available

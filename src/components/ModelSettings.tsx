@@ -7,14 +7,16 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { checkForNvidiaGPU } from "@/utils/platformUtils";
-import { Settings, Cpu, Monitor, Server } from "lucide-react";
+import { Settings, Cpu, Monitor, Server, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
+import ollamaService from "@/services/ollamaService";
 
 interface ModelSettingsProps {
   onSettingsChange: (settings: {
     temperature: number;
     useGPU: boolean;
     maxTokens: number;
-    endpoint: string;  // Changed from optional to required
+    endpoint: string;  // Required
   }) => void;
 }
 
@@ -26,6 +28,7 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ onSettingsChange }) => {
   const [hasGPU, setHasGPU] = useState(false);
   const [endpoint, setEndpoint] = useState("http://localhost:11434");
   const [isRemoteServer, setIsRemoteServer] = useState(false);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
 
   // Check for GPU on component mount
   useEffect(() => {
@@ -47,6 +50,30 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ onSettingsChange }) => {
       endpoint
     });
   }, [temperature, useGPU, maxTokens, endpoint, onSettingsChange]);
+
+  const handleEndpointChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newEndpoint = e.target.value;
+    setEndpoint(newEndpoint);
+  };
+
+  const testConnection = async () => {
+    setIsTestingConnection(true);
+    try {
+      ollamaService.setEndpoint(endpoint);
+      const isRunning = await ollamaService.resetConnection();
+      
+      if (isRunning) {
+        toast.success(`Successfully connected to Ollama at ${endpoint}`);
+      } else {
+        toast.error(`Failed to connect to Ollama at ${endpoint}`);
+      }
+    } catch (error) {
+      console.error("Error testing connection:", error);
+      toast.error(`Connection error: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
 
   return (
     <div className="my-4">
@@ -133,21 +160,31 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ onSettingsChange }) => {
                 </Label>
               </div>
               
-              {isRemoteServer && (
-                <div className="pt-2">
-                  <Label htmlFor="endpoint" className="mb-1 block text-xs">Ollama Endpoint URL</Label>
-                  <Input
-                    id="endpoint"
-                    placeholder="http://localhost:11434"
-                    value={endpoint}
-                    onChange={(e) => setEndpoint(e.target.value)}
-                    className="text-sm"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    For SSH tunnels, use localhost with forwarded port
-                  </p>
+              <div className={isRemoteServer ? "pt-2" : "pt-2"}>
+                <div className="flex items-center justify-between mb-1">
+                  <Label htmlFor="endpoint" className="text-xs">Ollama Endpoint URL</Label>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={testConnection}
+                    disabled={isTestingConnection}
+                    className="h-7 text-xs"
+                  >
+                    <RefreshCw className={`h-3 w-3 mr-1 ${isTestingConnection ? 'animate-spin' : ''}`} />
+                    Test
+                  </Button>
                 </div>
-              )}
+                <Input
+                  id="endpoint"
+                  placeholder="http://localhost:11434"
+                  value={endpoint}
+                  onChange={handleEndpointChange}
+                  className="text-sm"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  For SSH tunnels, use localhost with forwarded port
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

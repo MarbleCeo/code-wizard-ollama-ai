@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, Terminal, Code, Download, Cpu, Zap, FolderOpen, Server } from "lucide-react";
+import { AlertCircle, Terminal, Code, Download, Cpu, Zap, FolderOpen, Server, RefreshCw } from "lucide-react";
 import CommandInput from "./CommandInput";
 import CommandOutput from "./CommandOutput";
 import ModelSettings from "./ModelSettings";
@@ -25,6 +25,7 @@ const CodeWizard: React.FC = () => {
   const [ollamaConnected, setOllamaConnected] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [showInstallInstructions, setShowInstallInstructions] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [modelSettings, setModelSettings] = useState({
     temperature: 0.2,
     useGPU: true,
@@ -46,10 +47,18 @@ const CodeWizard: React.FC = () => {
 
   useEffect(() => {
     checkOllamaStatus();
-  }, [modelSettings.endpoint]);
+  }, []);
 
   const checkOllamaStatus = async () => {
     try {
+      setIsConnecting(true);
+      
+      addOutput({
+        type: "info",
+        content: `Checking Ollama connection at ${ollamaService.getEndpoint()}...`,
+        timestamp: new Date()
+      });
+      
       const isRunning = await ollamaService.isOllamaRunning();
       setOllamaConnected(isRunning);
       
@@ -62,15 +71,26 @@ const CodeWizard: React.FC = () => {
           content: `Ollama is ${isRunning ? "running" : "not running"} at ${ollamaService.getEndpoint()}. Model qwen2.5-coder:14b is ${isAvailable ? "loaded" : "not loaded"}.`,
           timestamp: new Date()
         });
+        
+        toast.success("Connected to Ollama successfully");
       } else {
         addOutput({
-          type: "info",
+          type: "error",
           content: `Ollama is not running at ${ollamaService.getEndpoint()}. Please start Ollama to use the Code Wizard.`,
           timestamp: new Date()
         });
+        
+        toast.error("Failed to connect to Ollama. Is it running?");
       }
     } catch (error) {
       console.error("Failed to check Ollama status:", error);
+      addOutput({
+        type: "error",
+        content: `Connection error: ${error instanceof Error ? error.message : "Unknown error"}`,
+        timestamp: new Date()
+      });
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -344,20 +364,36 @@ const CodeWizard: React.FC = () => {
                     variant="outline" 
                     size="sm"
                     onClick={checkOllamaStatus}
+                    disabled={isConnecting}
                   >
-                    <Server className="h-4 w-4 mr-1" />
-                    Status
+                    <RefreshCw className={`h-4 w-4 mr-1 ${isConnecting ? 'animate-spin' : ''}`} />
+                    Reconnect
                   </Button>
                 </div>
               ) : (
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setShowInstallInstructions(true)}
-                >
-                  <Download className="h-4 w-4 mr-1" />
-                  Install Ollama
-                </Button>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center text-yellow-400 text-sm">
+                    <div className="w-2 h-2 rounded-full bg-yellow-400 mr-2"></div>
+                    Disconnected
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={checkOllamaStatus}
+                    disabled={isConnecting}
+                  >
+                    <Server className={`h-4 w-4 mr-1 ${isConnecting ? 'animate-spin' : ''}`} />
+                    Connect
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setShowInstallInstructions(true)}
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Install Ollama
+                  </Button>
+                </div>
               )}
             </div>
           </div>
