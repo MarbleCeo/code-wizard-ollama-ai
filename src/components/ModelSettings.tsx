@@ -6,7 +6,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { checkForNvidiaGPU } from "@/utils/platformUtils";
-import { Settings, Cpu, Gpu } from "lucide-react";
+import { Settings, Cpu, Monitor } from "lucide-react";
 
 interface ModelSettingsProps {
   onSettingsChange: (settings: {
@@ -102,7 +102,7 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ onSettingsChange }) => {
               />
               <Label htmlFor="use-gpu" className="flex items-center gap-1">
                 {useGPU ? (
-                  <Gpu className="h-4 w-4 text-green-400" />
+                  <Monitor className="h-4 w-4 text-green-400" />
                 ) : (
                   <Cpu className="h-4 w-4" />
                 )}
