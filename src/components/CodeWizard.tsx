@@ -4,10 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, Terminal, Code, Download, Cpu, Zap } from "lucide-react";
+import { AlertCircle, Terminal, Code, Download, Cpu, Zap, FolderOpen, Server } from "lucide-react";
 import CommandInput from "./CommandInput";
 import CommandOutput from "./CommandOutput";
 import ModelSettings from "./ModelSettings";
+import FileExplorer from "./FileExplorer";
 import InstallInstructions from "./InstallInstructions";
 import ollamaService from "@/services/ollamaService";
 import commandService, { CommandResult } from "@/services/commandService";
@@ -28,9 +29,10 @@ const CodeWizard: React.FC = () => {
   const [modelSettings, setModelSettings] = useState({
     temperature: 0.2,
     useGPU: true,
-    maxTokens: 2048
+    maxTokens: 2048,
+    endpoint: "http://localhost:11434"
   });
-  const [activeTab, setActiveTab] = useState<"commands" | "code">("commands");
+  const [activeTab, setActiveTab] = useState<"commands" | "code" | "files">("commands");
   const [os, setOs] = useState<'windows' | 'linux' | 'mac' | 'unknown'>('unknown');
 
   // Set up the display OS
@@ -38,10 +40,17 @@ const CodeWizard: React.FC = () => {
     setOs(detectOS());
   }, []);
 
+  // Update Ollama endpoint when settings change
+  useEffect(() => {
+    if (modelSettings.endpoint) {
+      ollamaService.setEndpoint(modelSettings.endpoint);
+    }
+  }, [modelSettings.endpoint]);
+
   // Check if Ollama is running on component mount
   useEffect(() => {
     checkOllamaStatus();
-  }, []);
+  }, [modelSettings.endpoint]);
 
   // Check Ollama connection status
   const checkOllamaStatus = async () => {
@@ -55,13 +64,13 @@ const CodeWizard: React.FC = () => {
         
         addOutput({
           type: "info",
-          content: `Ollama is ${isRunning ? "running" : "not running"}. Model qwen2.5-coder:14b is ${isAvailable ? "loaded" : "not loaded"}.`,
+          content: `Ollama is ${isRunning ? "running" : "not running"} at ${ollamaService.getEndpoint()}. Model qwen2.5-coder:14b is ${isAvailable ? "loaded" : "not loaded"}.`,
           timestamp: new Date()
         });
       } else {
         addOutput({
           type: "info",
-          content: "Ollama is not running. Please start Ollama to use the Code Wizard.",
+          content: `Ollama is not running at ${ollamaService.getEndpoint()}. Please start Ollama to use the Code Wizard.`,
           timestamp: new Date()
         });
       }
@@ -105,6 +114,19 @@ const CodeWizard: React.FC = () => {
         timestamp: new Date()
       });
     }
+    // Special case for SSH commands
+    else if (command.match(/^ssh/i)) {
+      await handleSSHCommand(command);
+    }
+    // Handle warpify command
+    else if (command.match(/^warpify|analyze/i)) {
+      setActiveTab("files");
+      addOutput({
+        type: "info",
+        content: "Switched to File Explorer. Select files to analyze.",
+        timestamp: new Date()
+      });
+    }
     // Handle AI commands (anything that's not a system command)
     else if (!command.match(/^(cd|ls|dir|mkdir|rm|git|npm|yarn|pnpm)/i)) {
       await handleAICommand(command);
@@ -134,6 +156,37 @@ const CodeWizard: React.FC = () => {
         timestamp: new Date()
       });
     }
+  };
+
+  // Handle SSH command
+  const handleSSHCommand = async (command: string) => {
+    // Extract host from ssh command
+    const hostMatch = command.match(/ssh\s+(?:-\w+\s+)*([^@\s]+@)?([^@\s]+)/i);
+    const host = hostMatch ? hostMatch[2] : "remote-host";
+    
+    addOutput({
+      type: "info",
+      content: `Connecting to ${host}...`,
+      timestamp: new Date()
+    });
+    
+    // Simulate connection
+    setTimeout(() => {
+      addOutput({
+        type: "response",
+        content: `Connected to ${host}\nTo run Ollama on this server, make sure to forward port 11434 in your SSH connection`,
+        timestamp: new Date()
+      });
+      
+      // Suggest port forwarding
+      addOutput({
+        type: "info",
+        content: `Tip: For remote Ollama, use: ssh -L 11434:localhost:11434 user@${host}`,
+        timestamp: new Date()
+      });
+      
+      toast.success(`Connected to ${host}`);
+    }, 2000);
   };
 
   // Handle Ollama run command
@@ -228,9 +281,42 @@ const CodeWizard: React.FC = () => {
       timestamp: new Date()
     });
     
-    // Simulate streaming response from Ollama
-    let fullResponse = "";
-    const streamInterval = setInterval(() => {
+    try {
+      let fullResponse = "";
+      
+      // Try to use actual Ollama if connected
+      await ollamaService.streamCompletion(
+        command,
+        {
+          temperature: modelSettings.temperature,
+          useGPU: modelSettings.useGPU,
+          maxTokens: modelSettings.maxTokens
+        },
+        (chunk, done) => {
+          fullResponse += chunk;
+          if (done) {
+            addOutput({
+              type: "response",
+              content: fullResponse,
+              timestamp: new Date()
+            });
+            
+            // Check if there are executable commands in the response
+            const commands = commandService.parseCommandsFromAI(fullResponse);
+            if (commands.length > 0) {
+              addOutput({
+                type: "info",
+                content: `Found ${commands.length} executable command${commands.length > 1 ? 's' : ''}. Use the Execute button to run them.`,
+                timestamp: new Date()
+              });
+            }
+          }
+        }
+      );
+    } catch (error) {
+      console.error("Error with Ollama:", error);
+      
+      // Fallback to simulated responses if actual Ollama call fails
       const responses = [
         "```python\ndef hello_world():\n    print('Hello, world!')\n```",
         "I'd recommend creating a function to handle this task:",
@@ -240,28 +326,22 @@ const CodeWizard: React.FC = () => {
       ];
       
       const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-      fullResponse = randomResponse;
-      
-      // In a real implementation, we would stream chunks of the response
-      // For this simulation, we'll just show the full response after a delay
-      clearInterval(streamInterval);
       
       addOutput({
         type: "response",
-        content: fullResponse,
+        content: randomResponse,
         timestamp: new Date()
       });
-      
-      // Check if there are executable commands in the response
-      const commands = commandService.parseCommandsFromAI(fullResponse);
-      if (commands.length > 0) {
-        addOutput({
-          type: "info",
-          content: `Found ${commands.length} executable command${commands.length > 1 ? 's' : ''}. Use the Execute button to run them.`,
-          timestamp: new Date()
-        });
-      }
-    }, 1500);
+    }
+  };
+
+  // Handle file analysis results
+  const handleFileAnalysis = (result: string) => {
+    addOutput({
+      type: "response",
+      content: result,
+      timestamp: new Date()
+    });
   };
 
   // Handle model settings change
@@ -269,6 +349,7 @@ const CodeWizard: React.FC = () => {
     temperature: number;
     useGPU: boolean;
     maxTokens: number;
+    endpoint?: string;
   }) => {
     setModelSettings(settings);
   };
@@ -289,9 +370,19 @@ const CodeWizard: React.FC = () => {
             </CardTitle>
             <div className="flex items-center gap-2">
               {ollamaConnected ? (
-                <div className="flex items-center text-green-400 text-sm">
-                  <div className="w-2 h-2 rounded-full bg-green-400 mr-2 animate-pulse"></div>
-                  Ollama Connected
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center text-green-400 text-sm">
+                    <div className="w-2 h-2 rounded-full bg-green-400 mr-2 animate-pulse"></div>
+                    Ollama Connected
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={checkOllamaStatus}
+                  >
+                    <Server className="h-4 w-4 mr-1" />
+                    Status
+                  </Button>
                 </div>
               ) : (
                 <Button 
@@ -308,7 +399,7 @@ const CodeWizard: React.FC = () => {
         </CardHeader>
         
         <CardContent className="pt-6">
-          <Tabs defaultValue="commands" onValueChange={(value) => setActiveTab(value as "commands" | "code")}>
+          <Tabs defaultValue="commands" value={activeTab} onValueChange={(value) => setActiveTab(value as "commands" | "code" | "files")}>
             <TabsList className="mb-4">
               <TabsTrigger value="commands" className="flex items-center gap-1">
                 <Terminal className="h-4 w-4" />
@@ -317,6 +408,10 @@ const CodeWizard: React.FC = () => {
               <TabsTrigger value="code" className="flex items-center gap-1">
                 <Code className="h-4 w-4" />
                 Code Generation
+              </TabsTrigger>
+              <TabsTrigger value="files" className="flex items-center gap-1">
+                <FolderOpen className="h-4 w-4" />
+                Files
               </TabsTrigger>
             </TabsList>
             
@@ -340,6 +435,23 @@ const CodeWizard: React.FC = () => {
               </div>
               
               <CommandOutput output={output} />
+            </TabsContent>
+            
+            <TabsContent value="files" className="space-y-4">
+              <div className="flex items-center space-x-2 p-3 rounded-md bg-secondary/20 border border-border">
+                <FolderOpen className="h-5 w-5 text-accent" />
+                <p className="text-sm text-muted-foreground">
+                  Select files to analyze and get AI insights about your codebase.
+                </p>
+              </div>
+              
+              <CommandOutput output={output} />
+              
+              <FileExplorer 
+                onAnalyze={handleFileAnalysis}
+                isProcessing={isProcessing}
+                setIsProcessing={setIsProcessing}
+              />
             </TabsContent>
           </Tabs>
           

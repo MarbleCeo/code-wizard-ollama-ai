@@ -5,14 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { checkForNvidiaGPU } from "@/utils/platformUtils";
-import { Settings, Cpu, Monitor } from "lucide-react";
+import { Settings, Cpu, Monitor, Server } from "lucide-react";
 
 interface ModelSettingsProps {
   onSettingsChange: (settings: {
     temperature: number;
     useGPU: boolean;
     maxTokens: number;
+    endpoint?: string;
   }) => void;
 }
 
@@ -22,6 +24,8 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ onSettingsChange }) => {
   const [useGPU, setUseGPU] = useState(true);
   const [maxTokens, setMaxTokens] = useState(2048);
   const [hasGPU, setHasGPU] = useState(false);
+  const [endpoint, setEndpoint] = useState("http://localhost:11434");
+  const [isRemoteServer, setIsRemoteServer] = useState(false);
 
   // Check for GPU on component mount
   useEffect(() => {
@@ -39,9 +43,10 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ onSettingsChange }) => {
     onSettingsChange({
       temperature,
       useGPU,
-      maxTokens
+      maxTokens,
+      endpoint
     });
-  }, [temperature, useGPU, maxTokens, onSettingsChange]);
+  }, [temperature, useGPU, maxTokens, endpoint, onSettingsChange]);
 
   return (
     <div className="my-4">
@@ -112,6 +117,36 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ onSettingsChange }) => {
                 <span className="text-xs text-muted-foreground ml-2">
                   (No NVIDIA GPU detected)
                 </span>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="remote-server"
+                  checked={isRemoteServer}
+                  onCheckedChange={setIsRemoteServer}
+                />
+                <Label htmlFor="remote-server" className="flex items-center gap-1">
+                  <Server className="h-4 w-4" />
+                  <span>Connect to Remote Ollama</span>
+                </Label>
+              </div>
+              
+              {isRemoteServer && (
+                <div className="pt-2">
+                  <Label htmlFor="endpoint" className="mb-1 block text-xs">Ollama Endpoint URL</Label>
+                  <Input
+                    id="endpoint"
+                    placeholder="http://localhost:11434"
+                    value={endpoint}
+                    onChange={(e) => setEndpoint(e.target.value)}
+                    className="text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    For SSH tunnels, use localhost with forwarded port
+                  </p>
+                </div>
               )}
             </div>
           </CardContent>

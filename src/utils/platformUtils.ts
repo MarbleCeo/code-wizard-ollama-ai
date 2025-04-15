@@ -74,3 +74,36 @@ export const formatCommand = (command: string, os: 'windows' | 'linux' | 'mac' |
   
   return command;
 };
+
+// Get SSH command for port forwarding
+export const getSSHPortForwardingCommand = (host: string, username: string = 'user', localPort: number = 11434, remotePort: number = 11434): string => {
+  return `ssh -L ${localPort}:localhost:${remotePort} ${username}@${host}`;
+};
+
+// Parse SSH connection string
+export const parseSSHConnectionString = (sshString: string): { username: string, host: string, port?: number } => {
+  // Format: [user@]host[:port]
+  const regex = /^(?:([^@]+)@)?([^:]+)(?::(\d+))?$/;
+  const match = sshString.match(regex);
+  
+  if (!match) {
+    return { username: 'user', host: sshString };
+  }
+  
+  return {
+    username: match[1] || 'user',
+    host: match[2],
+    port: match[3] ? parseInt(match[3], 10) : undefined
+  };
+};
+
+// Generate path for current OS
+export const formatPath = (path: string, os: 'windows' | 'linux' | 'mac' | 'unknown'): string => {
+  if (os === 'windows') {
+    // Convert Unix-style paths to Windows style
+    return path.replace(/\//g, '\\');
+  }
+  
+  // Convert Windows-style paths to Unix style
+  return path.replace(/\\/g, '/');
+};

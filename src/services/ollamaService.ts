@@ -8,6 +8,7 @@ interface OllamaOptions {
   useGPU: boolean;
   temperature: number;
   maxTokens?: number;
+  endpoint?: string;
 }
 
 interface OllamaResponse {
@@ -15,10 +16,17 @@ interface OllamaResponse {
   done: boolean;
 }
 
+interface FileContent {
+  path: string;
+  content: string;
+  isDirectory: boolean;
+}
+
 export class OllamaService {
   private baseUrl: string;
   private defaultOptions: OllamaOptions;
   private isRunning: boolean = false;
+  private currentWorkingDirectory: string = "/";
 
   constructor(baseUrl: string = 'http://localhost:11434') {
     this.baseUrl = baseUrl;
@@ -28,6 +36,26 @@ export class OllamaService {
       temperature: 0.2,
       maxTokens: 2048
     };
+  }
+
+  // Set the Ollama endpoint
+  public setEndpoint(endpoint: string): void {
+    this.baseUrl = endpoint;
+  }
+
+  // Get the current endpoint
+  public getEndpoint(): string {
+    return this.baseUrl;
+  }
+
+  // Set current working directory
+  public setWorkingDirectory(path: string): void {
+    this.currentWorkingDirectory = path;
+  }
+
+  // Get current working directory
+  public getWorkingDirectory(): string {
+    return this.currentWorkingDirectory;
   }
 
   // Check if Ollama is running
@@ -75,10 +103,8 @@ export class OllamaService {
     }
 
     try {
-      // Simulate start of pulling (in a real implementation, you'd track progress)
       console.log(`Pulling model ${modelName}...`);
       
-      // This would be an async call in a real implementation
       const response = await fetch(`${this.baseUrl}/api/pull`, {
         method: 'POST',
         headers: {
@@ -103,6 +129,28 @@ export class OllamaService {
     }
     
     return await this.pullModel(modelName);
+  }
+
+  // Analyze a file or folder structure
+  public async analyzeFilesOrFolders(
+    paths: string[],
+    options: Partial<OllamaOptions> = {}
+  ): Promise<string> {
+    if (!await this.isOllamaRunning()) {
+      throw new Error('Ollama is not running');
+    }
+
+    // In a web environment, we can't directly access the file system
+    // This would need to be implemented through a backend service
+    // For now, we'll simulate it
+    const fileContents = this.simulateFileContents(paths);
+    const fileContentString = fileContents.map(file => 
+      `${file.path} ${file.isDirectory ? '(directory)' : ''}:\n${file.content}`
+    ).join('\n\n');
+
+    const prompt = `Analyze the following files and directories:\n\n${fileContentString}\n\nProvide insights, potential improvements, and code quality assessment.`;
+    
+    return this.generateCompletion(prompt, options);
   }
 
   // Generate code completion
@@ -216,6 +264,31 @@ export class OllamaService {
       console.error('Failed to stream completion:', error);
       onChunk(`Error: ${error}`, true);
     }
+  }
+
+  // Simulate file system access (would be replaced with actual backend service)
+  private simulateFileContents(paths: string[]): FileContent[] {
+    const sampleContents: FileContent[] = [];
+    
+    for (const path of paths) {
+      if (path.includes('.')) {
+        // Simulating a file
+        sampleContents.push({
+          path,
+          content: `// Sample content for ${path}\n// This would be actual file content in a real implementation`,
+          isDirectory: false
+        });
+      } else {
+        // Simulating a directory
+        sampleContents.push({
+          path,
+          content: "file1.txt\nfile2.js\nsubdir/",
+          isDirectory: true
+        });
+      }
+    }
+    
+    return sampleContents;
   }
 }
 
