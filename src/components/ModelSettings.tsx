@@ -14,7 +14,7 @@ interface ModelSettingsProps {
     temperature: number;
     useGPU: boolean;
     maxTokens: number;
-    endpoint?: string;
+    endpoint: string;  // Changed from optional to required
   }) => void;
 }
 

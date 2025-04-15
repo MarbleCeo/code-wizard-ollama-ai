@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,24 +34,20 @@ const CodeWizard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"commands" | "code" | "files">("commands");
   const [os, setOs] = useState<'windows' | 'linux' | 'mac' | 'unknown'>('unknown');
 
-  // Set up the display OS
   useEffect(() => {
     setOs(detectOS());
   }, []);
 
-  // Update Ollama endpoint when settings change
   useEffect(() => {
     if (modelSettings.endpoint) {
       ollamaService.setEndpoint(modelSettings.endpoint);
     }
   }, [modelSettings.endpoint]);
 
-  // Check if Ollama is running on component mount
   useEffect(() => {
     checkOllamaStatus();
   }, [modelSettings.endpoint]);
 
-  // Check Ollama connection status
   const checkOllamaStatus = async () => {
     try {
       const isRunning = await ollamaService.isOllamaRunning();
@@ -79,23 +74,19 @@ const CodeWizard: React.FC = () => {
     }
   };
 
-  // Add an item to the output display
   const addOutput = (item: OutputItem) => {
     setOutput(prev => [...prev, item]);
   };
 
-  // Handle sending a command
   const handleSendCommand = async (command: string) => {
     setIsProcessing(true);
     
-    // Add command to output
     addOutput({
       type: "command",
       content: command,
       timestamp: new Date()
     });
 
-    // If command starts with "ollama", handle it specially
     if (command.startsWith("ollama")) {
       if (command.includes("run")) {
         await handleOllamaRunCommand(command);
@@ -104,42 +95,31 @@ const CodeWizard: React.FC = () => {
       } else {
         await executeCommand(command);
       }
-    } 
-    // Special case for installation instructions
-    else if (command.match(/install ollama/i)) {
+    } else if (command.match(/install ollama/i)) {
       setShowInstallInstructions(true);
       addOutput({
         type: "info",
         content: "Showing Ollama installation instructions...",
         timestamp: new Date()
       });
-    }
-    // Special case for SSH commands
-    else if (command.match(/^ssh/i)) {
+    } else if (command.match(/^ssh/i)) {
       await handleSSHCommand(command);
-    }
-    // Handle warpify command
-    else if (command.match(/^warpify|analyze/i)) {
+    } else if (command.match(/^warpify|analyze/i)) {
       setActiveTab("files");
       addOutput({
         type: "info",
         content: "Switched to File Explorer. Select files to analyze.",
         timestamp: new Date()
       });
-    }
-    // Handle AI commands (anything that's not a system command)
-    else if (!command.match(/^(cd|ls|dir|mkdir|rm|git|npm|yarn|pnpm)/i)) {
+    } else if (!command.match(/^(cd|ls|dir|mkdir|rm|git|npm|yarn|pnpm)/i)) {
       await handleAICommand(command);
-    } 
-    // Default: try to execute as system command
-    else {
+    } else {
       await executeCommand(command);
     }
     
     setIsProcessing(false);
   };
 
-  // Execute a system command
   const executeCommand = async (command: string) => {
     try {
       const result = await commandService.executeCommand(command);
@@ -158,9 +138,7 @@ const CodeWizard: React.FC = () => {
     }
   };
 
-  // Handle SSH command
   const handleSSHCommand = async (command: string) => {
-    // Extract host from ssh command
     const hostMatch = command.match(/ssh\s+(?:-\w+\s+)*([^@\s]+@)?([^@\s]+)/i);
     const host = hostMatch ? hostMatch[2] : "remote-host";
     
@@ -170,7 +148,6 @@ const CodeWizard: React.FC = () => {
       timestamp: new Date()
     });
     
-    // Simulate connection
     setTimeout(() => {
       addOutput({
         type: "response",
@@ -178,7 +155,6 @@ const CodeWizard: React.FC = () => {
         timestamp: new Date()
       });
       
-      // Suggest port forwarding
       addOutput({
         type: "info",
         content: `Tip: For remote Ollama, use: ssh -L 11434:localhost:11434 user@${host}`,
@@ -189,7 +165,6 @@ const CodeWizard: React.FC = () => {
     }, 2000);
   };
 
-  // Handle Ollama run command
   const handleOllamaRunCommand = async (command: string) => {
     const modelMatch = command.match(/ollama run (\S+)/);
     const modelName = modelMatch ? modelMatch[1] : "qwen2.5-coder:14b";
@@ -214,7 +189,6 @@ const CodeWizard: React.FC = () => {
     }, 2000);
   };
 
-  // Handle Ollama pull command
   const handleOllamaPullCommand = async (command: string) => {
     const modelMatch = command.match(/ollama pull (\S+)/);
     const modelName = modelMatch ? modelMatch[1] : "qwen2.5-coder:14b";
@@ -225,7 +199,6 @@ const CodeWizard: React.FC = () => {
       timestamp: new Date()
     });
     
-    // Simulate a pull with progress updates
     let progress = 0;
     const intervalId = setInterval(() => {
       progress += 20;
@@ -253,9 +226,7 @@ const CodeWizard: React.FC = () => {
     }, 1000);
   };
 
-  // Handle AI-based command (code generation)
   const handleAICommand = async (command: string) => {
-    // First check if we need to simulate being connected
     if (!ollamaConnected) {
       addOutput({
         type: "error",
@@ -274,7 +245,6 @@ const CodeWizard: React.FC = () => {
       return;
     }
     
-    // Add a thinking message
     addOutput({
       type: "info",
       content: "Thinking...",
@@ -284,7 +254,6 @@ const CodeWizard: React.FC = () => {
     try {
       let fullResponse = "";
       
-      // Try to use actual Ollama if connected
       await ollamaService.streamCompletion(
         command,
         {
@@ -301,7 +270,6 @@ const CodeWizard: React.FC = () => {
               timestamp: new Date()
             });
             
-            // Check if there are executable commands in the response
             const commands = commandService.parseCommandsFromAI(fullResponse);
             if (commands.length > 0) {
               addOutput({
@@ -316,7 +284,6 @@ const CodeWizard: React.FC = () => {
     } catch (error) {
       console.error("Error with Ollama:", error);
       
-      // Fallback to simulated responses if actual Ollama call fails
       const responses = [
         "```python\ndef hello_world():\n    print('Hello, world!')\n```",
         "I'd recommend creating a function to handle this task:",
@@ -335,7 +302,6 @@ const CodeWizard: React.FC = () => {
     }
   };
 
-  // Handle file analysis results
   const handleFileAnalysis = (result: string) => {
     addOutput({
       type: "response",
@@ -344,12 +310,11 @@ const CodeWizard: React.FC = () => {
     });
   };
 
-  // Handle model settings change
   const handleSettingsChange = (settings: {
     temperature: number;
     useGPU: boolean;
     maxTokens: number;
-    endpoint?: string;
+    endpoint: string;
   }) => {
     setModelSettings(settings);
   };
